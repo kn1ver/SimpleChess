@@ -1,5 +1,16 @@
-const svg = document.getElementById("svg");
+const board = Array.from({ length: 8 }, () => Array(8).fill(null));
+let selectedPiece;
+let newSelectedPiece;
 const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("svg");
+const cellHighlight = document.createElementNS(NS, "rect")
+
+cellHighlight.setAttribute("width", 19);
+cellHighlight.setAttribute("height", 19);
+
+cellHighlight.setAttribute("fill", "none");
+cellHighlight.setAttribute("stroke", "white");
+cellHighlight.setAttribute("stroke-width", "1");
 
 function drawBoard() {
     for (let x = 0; x < 8; x++) {
@@ -17,14 +28,16 @@ function drawBoard() {
             rect.setAttribute("width", 20);
             rect.setAttribute("height", 20);
 
+            rect.dataset.row = y
+            rect.dataset.col = x
+
             svg.appendChild(rect);
         }
     }
 }
-function drawFigures(figures) {
-    for (let figure of figures) {
-        console.log(figure)
-        figure.draw()
+function drawPieces(pieces) {
+    for (let piece of pieces.values()) {
+        piece.draw()
     }
 }
 
@@ -42,25 +55,45 @@ function circle(cx, cy, r) {
     return c;
 }
 
-class Figure {
-    svg = undefined
-    coord = { x: 0, y: 0 }
-    team = undefined
-    name = undefined
+class Piece {
+    svg = undefined;
+    team = undefined;
+    name = undefined;
+    group = undefined;
+
+    coord = { x: 0, y: 0 };
+    row = 1;
+    col = 1;
+
     constructor(svg, coord = { x: 0, y: 0 }, team = "Black", name = "King") {
         this.coord = coord;
         this.team = team;
         this.name = name;
-        this.svg = svg
+        this.svg = svg;
+        this.row = coord.y / 20;
+        this.col = coord.x / 20;
+
+        board[this.col][this.row] = this;
     }
 
     moveTo(newX = 0, newY = 0) {
+        console.log(`Двигаем ${this.name} на`, newX / 20, newY / 20)
+
+        board[newX / 20][newY / 20] = this
+        board[this.coord.x / 20][this.coord.y / 20] = undefined
+
         this.coord = { x: newX, y: newY }
+        this.row = newY / 20;
+        this.col = newX / 20;
+        this.group.dataset.col = newX / 20
+        this.group.dataset.row = newY / 20
+
+        drawPieces(pieces)
     }
 }
-class Queen extends Figure {
+class Queen extends Piece {
     draw(x = this.coord.x, y = this.coord.y, scale = 1) {
-        const group = document.createElementNS(NS, "g");
+        let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
         // стили как в SVG
@@ -101,13 +134,18 @@ class Queen extends Figure {
         group.appendChild(path(`M10 4.2 A1 1 0 1 1 9.99 4.2`));
         group.appendChild(path(`M12.5 5.2 A0.8 0.8 0 1 1 12.49 5.2`));
 
+        group.dataset.row = this.row;
+        group.dataset.col = this.col;
+
         svg.appendChild(group);
+        this.group = group;
         return group;
     }
 }
-class Pawn extends Figure {
+class Pawn extends Piece {
+    firstMove = true
     draw(x = this.coord.x, y = this.coord.y, scale = 1) {
-        const group = document.createElementNS(NS, "g");
+        let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
         group.appendChild(circle(10, 6, 2.2));
@@ -126,13 +164,39 @@ class Pawn extends Figure {
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
+        group.dataset.row = this.row;
+        group.dataset.col = this.col;
+
         svg.appendChild(group);
+        this.group = group;
         return group;
     }
+    availableMoves() {
+        let moves = []
+        moves.push([this.col, this.row - 1])
+        if (!board.get([this.col, this.row]) && this.firstMove) {
+            moves.push([this.col, this.row - 2])
+        }
+        if (board.get([this.col - 1, this.row - 1])) {
+            moves.push([this.col - 1, this.row - 1])
+        }
+        if (board.get([this.col + 1, this.row - 1])) {
+            moves.push([this.col + 1, this.row - 1])
+        }
+        return moves
+    }
+    drawMoves(moves) {
+        let circle_ = document.createElementNS(NS, "g")
+        for (let move of moves) {
+            circle_.appendChild(circle(move[0] * 20, move[1] * 20, 3))
+            circle_.setAttribute("fill", "#8484847d")
+            svg.appendChild(circle_)
+        }
+    }
 }
-class Rook extends Figure {
+class Rook extends Piece {
     draw(x = this.coord.x, y = this.coord.y, scale = 1) {
-        const group = document.createElementNS(NS, "g");
+        let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
         group.appendChild(path(`
@@ -167,13 +231,17 @@ class Rook extends Figure {
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
+        group.dataset.row = this.row;
+        group.dataset.col = this.col;
+
         svg.appendChild(group);
+        this.group = group;
         return group;
     }
 }
-class Knight extends Figure {
+class Knight extends Piece {
     draw(x = this.coord.x, y = this.coord.y, scale = 1) {
-        const group = document.createElementNS(NS, "g");
+        let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
         group.appendChild(path(`
@@ -193,13 +261,17 @@ class Knight extends Figure {
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
+        group.dataset.row = this.row;
+        group.dataset.col = this.col;
+
         svg.appendChild(group);
+        this.group = group;
         return group;
     }
 }
-class Bishop extends Figure {
+class Bishop extends Piece {
     draw(x = this.coord.x, y = this.coord.y, scale = 1) {
-        const group = document.createElementNS(NS, "g");
+        let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
         group.appendChild(path(`
@@ -225,13 +297,17 @@ class Bishop extends Figure {
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
+        group.dataset.row = this.row;
+        group.dataset.col = this.col;
+
         svg.appendChild(group);
+        this.group = group;
         return group;
     }
 }
-class King extends Figure {
+class King extends Piece {
     draw(x = this.coord.x, y = this.coord.y, scale = 1) {
-        const group = document.createElementNS(NS, "g");
+        let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
         group.appendChild(path(`M10 3 L10 6 M8.5 4.5 L11.5 4.5`, {
@@ -261,48 +337,79 @@ class King extends Figure {
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
+        group.dataset.row = this.row;
+        group.dataset.col = this.col;
+
         this.svg.appendChild(group);
+        this.group = group;
         return group;
     }
 }
 
-drawBoard()
+let pieces = new Map([
+    ["queenWhite", new Queen(svg, { x: 60, y: 140 }, "White", "queenWhite")],
+    ["kingWhite", new King(svg, { x: 80, y: 140 }, "White", "kingWhite")],
+    ["bishopWhite1", new Bishop(svg, { x: 40, y: 140 }, "White", "bishopWhite1")],
+    ["bishopWhite2", new Bishop(svg, { x: 100, y: 140 }, "White", "bishopWhite2")],
+    ["knightWhite1", new Knight(svg, { x: 20, y: 140 }, "White", "knightWhite1")],
+    ["knightWhite2", new Knight(svg, { x: 120, y: 140 }, "White", "knightWhite2")],
+    ["rookWhite1", new Rook(svg, { x: 0, y: 140 }, "White", "rookWhite1")],
+    ["rookWhite2", new Rook(svg, { x: 140, y: 140 }, "White", "rookWhite2")],
 
-let figures = [
-    queenWhite = new Queen(svg, { x: 60, y: 140 }, "White", "queenWhite"),
-    kingWhite = new King(svg, { x: 80, y: 140 }, "White", "kingWhite"),
-    bishopWhite1 = new Bishop(svg, { x: 40, y: 140 }, "White", "bishopWhite1"),
-    bishopWhite2 = new Bishop(svg, { x: 100, y: 140 }, "White", "bishopWhite2"),
-    knightWhite1 = new Knight(svg, { x: 20, y: 140 }, "White", "knightWhite1"),
-    knightWhite2 = new Knight(svg, { x: 120, y: 140 }, "White", "knightWhite2"),
-    rookWhite1 = new Rook(svg, { x: 0, y: 140 }, "White", "rookWhite1"),
-    rookWhite2 = new Rook(svg, { x: 140, y: 140 }, "White", "rookWhite2"),
+    ["queenBlack", new Queen(svg, { x: 60, y: 0 }, "Black", "queenBlack")],
+    ["kingBlack", new King(svg, { x: 80, y: 0 }, "Black", "kingBlack")],
+    ["bishopBlack1", new Bishop(svg, { x: 40, y: 0 }, "Black", "bishopBlack1")],
+    ["bishopBlack2", new Bishop(svg, { x: 100, y: 0 }, "Black", "bishopBlack2")],
+    ["knightBlack1", new Knight(svg, { x: 20, y: 0 }, "Black", "knightBlack1")],
+    ["knightBlack2", new Knight(svg, { x: 120, y: 0 }, "Black", "knightBlack2")],
+    ["rookBlack1", new Rook(svg, { x: 0, y: 0 }, "Black", "rookBlack1")],
+    ["rookBlack2", new Rook(svg, { x: 140, y: 0 }, "Black", "rookBlack2")]
+])
 
-    queenBlack = new Queen(svg, { x: 60, y: 0 }, "Black", "queenBlack"),
-    kingBlack = new King(svg, { x: 80, y: 0 }, "Black", "kingBlack"),
-    bishopBlack1 = new Bishop(svg, { x: 40, y: 0 }, "Black", "bishopBlack1"),
-    bishopBlack2 = new Bishop(svg, { x: 100, y: 0 }, "Black", "bishopBlack2"),
-    knightBlack1 = new Knight(svg, { x: 20, y: 0 }, "Black", "knightBlack1"),
-    knightBlack2 = new Knight(svg, { x: 120, y: 0 }, "Black", "knightBlack2"),
-    rookBlack1 = new Rook(svg, { x: 0, y: 0 }, "Black", "rookBlack1"),
-    rookBlack2 = new Rook(svg, { x: 140, y: 0 }, "Black", "rookBlack2")
-]
-
-
+// Добавляем все пешки в pieces
 for (let i = 1, x = 0, y = 20; i < 17; i++) {
     if (i < 9) {
-        figures.push(new Pawn(svg, { x: x, y: y }, "Black", "pawnBlack" + String(i)))
+        pieces.set("pawnBlack" + String(i), new Pawn(svg, { x: x, y: y }, "Black", "pawnBlack" + String(i)))
         x += 20
         y = 20
     } else if (i === 9) {
         x = 0
         y = 120
-        figures.push(new Pawn(svg, { x: x, y: y }, "White", "pawnWhite" + String(i - 8)))
+        pieces.set("pawnWhite" + String(i - 8), new Pawn(svg, { x: x, y: y }, "White", "pawnWhite" + String(i - 8)))
     } else {
         x += 20
         y = 120
-        figures.push(new Pawn(svg, { x: x, y: y }, "White", "pawnWhite" + String(i - 8)))
+        pieces.set("pawnWhite" + String(i - 8), new Pawn(svg, { x: x, y: y }, "White", "pawnWhite" + String(i - 8)))
     }
 }
-drawFigures(figures)
-console.log(figures)
+
+drawBoard()
+drawPieces(pieces)
+
+// Отслеживаем нажатие на фигуру
+svg.addEventListener("click", (event) => {
+    const target = event.target;
+    const col = target.dataset.col || target.parentElement.dataset.col
+    const row = target.dataset.row || target.parentElement.dataset.row
+
+    if (!selectedPiece && !board[col][row]) { console.log(`Выбрана пустая клетка ${col} ${row}`) }
+
+    if (board[col][row] && board[col][row] !== selectedPiece) {
+        selectedPiece = board[col][row]
+
+        cellHighlight.setAttribute("x", col * 20 + 0.5)
+        cellHighlight.setAttribute("y", row * 20 + 0.5)
+        svg.appendChild(cellHighlight)
+
+        console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row}`)
+    }
+    if (selectedPiece && !board[col][row]) {
+        selectedPiece.moveTo(col * 20, row * 20)
+        selectedPiece = undefined
+
+        cellHighlight.removeAttribute("x")
+        cellHighlight.removeAttribute("y")
+    }
+})
+
+
