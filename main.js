@@ -1,5 +1,6 @@
 const board = Array.from({ length: 8 }, () => Array(8).fill(null));
 const svgCache = {};
+const parser = new DOMParser();
 
 let whiteTakenPieces = [];
 let blackTakenPieces = [];
@@ -43,24 +44,21 @@ function drawBoard() {
 }
 function drawPieces(pieces) {
     for (let piece of pieces.values()) {
-        if (piece.onBoard) {
-            piece.drawPiece()
-        } else {
-            piece.drawPiece(60, 60, 200, 200, 0, -3)
-        }
+        piece.drawPiece()
     }
 }
 async function getSVG(url) {
-    if (!svgCache[url]) {
-        const res = await fetch(url);
-        svgCache[url] = await res.text();
+    if (svgCache[url]) {
+        return svgCache[url].cloneNode(true);
     }
+    const res = await fetch(url);
+    const text = await res.text();
 
-    const parser = new DOMParser();
-    return parser
-        .parseFromString(svgCache[url], "image/svg+xml")
-        .querySelector("svg")
-        .cloneNode(true);
+    const doc = parser.parseFromString(text, "image/svg+xml");
+    const svgEl = doc.querySelector("svg");
+
+    svgCache[url] = svgEl;
+    return svgEl.cloneNode(true);
 }
 
 function path(d, extra = {}) {
@@ -124,7 +122,7 @@ class Piece {
     drawPiece(width = 160, height = 160, viewBoxX = 400, viewBoxY = 400, x = 1, y = 1) {
         getSVG(this.team === "White" ? this.svgLinkWhite : this.svgLinkBlack).then(svgEl => {
             const group = this.group || svgEl
-            group.setAttribute("viewBox", `0, 0, ${viewBoxX}, ${viewBoxY}`);
+            group.setAttribute("viewBox", `0 0 ${viewBoxX} ${viewBoxY}`);
             group.setAttribute("x", this.coord.x + x);
             group.setAttribute("y", this.coord.y + y);
 
@@ -151,62 +149,31 @@ class Piece {
         this.group.dataset.col = newX / 20
         this.group.dataset.row = newY / 20
 
-        drawPieces(pieces)
+        this.group.setAttribute("x", newX + 1);
+        this.group.setAttribute("y", newY + 1);
     }
     attack(newCol, newRow) {
-        let otherPiece = board[newCol][newRow] || undefined;
+        let otherPiece = board[newCol][newRow] || undefined
+        if (!otherPiece) { return }
         console.log(`${this.name} ест ${otherPiece.name}`)
         otherPiece.die()
         this.moveTo(newCol * 20, newRow * 20)
     }
     die() {
-        if (this.team === "White") {
-            if (whiteTakenPieces[0]) {
-                if (whiteTakenPieces.length < 6) {
-                    this.coord.x = 160
-                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 11
-                } else if (whiteTakenPieces.length === 6) {
-                    this.coord.x = 170
-                    this.coord.y = 2
-                } else if (whiteTakenPieces.length < 12) {
-                    this.coord.x = 170
-                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 11
-                } else if (whiteTakenPieces.length === 12) {
-                    this.coord.x = 180
-                    this.coord.y = 2
-                } else {
-                    this.coord.x = 180
-                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 11
-                }
-            } else {
-                this.coord.x = 160
-                this.coord.y = 2
-            }
-            whiteTakenPieces.push(this)
-        } else {
-            if (blackTakenPieces[0]) {
-                if (blackTakenPieces.length < 6) {
-                    this.coord.x = 160
-                    this.coord.y = blackTakenPieces.at(-1).coord.y - 11
-                } else if (blackTakenPieces.length === 6) {
-                    this.coord.x = 170
-                    this.coord.y = 150
-                } else if (blackTakenPieces.length < 12) {
-                    this.coord.x = 170
-                    this.coord.y = blackTakenPieces.at(-1).coord.y - 11
-                } else if (blackTakenPieces.length === 12) {
-                    this.coord.x = 180
-                    this.coord.y = 150
-                } else {
-                    this.coord.x = 180
-                    this.coord.y = blackTakenPieces.at(-1).coord.y - 11
-                }
-            } else {
-                this.coord.x = 160
-                this.coord.y = 150
-            }
-            blackTakenPieces.push(this)
-        }
+        const perColumn = 6
+        const isBlack = this.team === "Black"
+        const taken = isBlack ? blackTakenPieces : whiteTakenPieces
+
+        taken.push(this)
+        const index = taken.length - 1
+
+        const col = Math.floor(index / perColumn)
+        const row = index % perColumn
+
+        this.coord.x = 160 + col * 10
+        this.coord.y = (isBlack ? 150 - row * 11 : row * 11)
+
+        this.drawPiece(60, 60, 200, 200, 0, isBlack ? -3 : 0)
         this.col = undefined
         this.row = undefined
         this.onBoard = false
