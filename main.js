@@ -162,46 +162,44 @@ class Piece {
     die() {
         if (this.team === "White") {
             if (whiteTakenPieces[0]) {
-                if (whiteTakenPieces.length < 8) {
+                if (whiteTakenPieces.length < 6) {
                     this.coord.x = 160
-                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 10
-                } else if (whiteTakenPieces.length === 8) {
+                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 11
+                } else if (whiteTakenPieces.length === 6) {
                     this.coord.x = 170
-                    this.coord.y = 0
+                    this.coord.y = 2
+                } else if (whiteTakenPieces.length < 12) {
+                    this.coord.x = 170
+                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 11
+                } else if (whiteTakenPieces.length === 12) {
+                    this.coord.x = 180
+                    this.coord.y = 2
                 } else {
-                    this.coord.x = 170
-                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 10
+                    this.coord.x = 180
+                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 11
                 }
             } else {
                 this.coord.x = 160
-                this.coord.y = 0
+                this.coord.y = 2
             }
             whiteTakenPieces.push(this)
         } else {
             if (blackTakenPieces[0]) {
-                if (blackTakenPieces.length < 8) {
-                    const samePiece = blackTakenPieces.findLast(el => el.name.slice(0, -1) === this.name.slice(0, -1))
-                    if (samePiece) {
-                        this.coord.x = 160
-                        this.coord.y = samePiece.coord.y - 4
-                        for (let piece of blackTakenPieces) {
-                            if (piece.coord.y < this.coord.y) {
-                                piece.coord.y -= 5
-                            }
-                        }
-                    } else {
-                        const minPiece = blackTakenPieces.reduce((min, piece) => piece.coord.y < min.coord.y ? piece : min)
-                        this.coord.x = 160
-                        this.coord.y = minPiece.coord.y - 12
-                    }
-
-
-                } else if (blackTakenPieces.length === 8) {
-                    this.coord.x = 175
+                if (blackTakenPieces.length < 6) {
+                    this.coord.x = 160
+                    this.coord.y = blackTakenPieces.at(-1).coord.y - 11
+                } else if (blackTakenPieces.length === 6) {
+                    this.coord.x = 170
+                    this.coord.y = 150
+                } else if (blackTakenPieces.length < 12) {
+                    this.coord.x = 170
+                    this.coord.y = blackTakenPieces.at(-1).coord.y - 11
+                } else if (blackTakenPieces.length === 12) {
+                    this.coord.x = 180
                     this.coord.y = 150
                 } else {
-                    this.coord.x = 175
-                    this.coord.y = blackTakenPieces.at(-1).coord.y - 12
+                    this.coord.x = 180
+                    this.coord.y = blackTakenPieces.at(-1).coord.y - 11
                 }
             } else {
                 this.coord.x = 160
