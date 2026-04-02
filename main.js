@@ -1,4 +1,5 @@
 const board = Array.from({ length: 8 }, () => Array(8).fill(null));
+let circle_
 let selectedPiece;
 let newSelectedPiece;
 const NS = "http://www.w3.org/2000/svg";
@@ -96,12 +97,6 @@ class Queen extends Piece {
         let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
-        // стили как в SVG
-        group.setAttribute("fill", "#ddd");
-        group.setAttribute("stroke", "#555");
-        group.setAttribute("stroke-width", "0.7");
-        group.setAttribute("stroke-linejoin", "round");
-
         // основание
         group.appendChild(path(`
             M4 16 
@@ -134,6 +129,16 @@ class Queen extends Piece {
         group.appendChild(path(`M10 4.2 A1 1 0 1 1 9.99 4.2`));
         group.appendChild(path(`M12.5 5.2 A0.8 0.8 0 1 1 12.49 5.2`));
 
+        if (this.team === "White") {
+            group.setAttribute("fill", "#ddd");
+            group.setAttribute("stroke", "#555");
+        } else {
+            group.setAttribute("fill", "#272727");
+            group.setAttribute("stroke", "#505050");
+        }
+        group.setAttribute("stroke-width", "0.7");
+        group.setAttribute("stroke-linejoin", "round");
+
         group.dataset.row = this.row;
         group.dataset.col = this.col;
 
@@ -144,6 +149,10 @@ class Queen extends Piece {
 }
 class Pawn extends Piece {
     firstMove = true
+    moveTo(newX = 0, newY = 0) {
+        super.moveTo(newX, newY)
+        this.firstMove = false
+    }
     draw(x = this.coord.x, y = this.coord.y, scale = 1) {
         let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
@@ -159,8 +168,13 @@ class Pawn extends Piece {
 
         group.appendChild(path(`M6 16 L14 16 L13 18 L7 18 Z`));
 
-        group.setAttribute("fill", "#ddd");
-        group.setAttribute("stroke", "#555");
+        if (this.team === "White") {
+            group.setAttribute("fill", "#ddd");
+            group.setAttribute("stroke", "#555");
+        } else {
+            group.setAttribute("fill", "#272727");
+            group.setAttribute("stroke", "#505050");
+        }
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
@@ -173,25 +187,64 @@ class Pawn extends Piece {
     }
     availableMoves() {
         let moves = []
-        moves.push([this.col, this.row - 1])
-        if (!board.get([this.col, this.row]) && this.firstMove) {
-            moves.push([this.col, this.row - 2])
-        }
-        if (board.get([this.col - 1, this.row - 1])) {
-            moves.push([this.col - 1, this.row - 1])
-        }
-        if (board.get([this.col + 1, this.row - 1])) {
-            moves.push([this.col + 1, this.row - 1])
+        if (this.team === "White") {
+            // ход вперед (вверх)
+            if (!board[this.col][this.row - 1]) {
+                moves.push([this.col, this.row - 1])
+            }
+            // двойной первый ход
+            if (!board[this.col][this.row - 2] && !board[this.col][this.row - 1] && this.firstMove) {
+                moves.push([this.col, this.row - 2])
+            }
+            // ход по диагонали (вверх-влево)
+            if (this.col !== 0 && board[this.col - 1][this.row - 1] && board[this.col - 1][this.row - 1].team !== this.team) {
+                moves.push([this.col - 1, this.row - 1])
+            }
+            // ход по диагонали (вверх-вправо)
+            if (this.col !== 7 && board[this.col + 1][this.row - 1] && board[this.col + 1][this.row - 1].team !== this.team) {
+                moves.push([this.col + 1, this.row - 1])
+            }
+        } else {
+            // ход вперед (вниз)
+            if (!board[this.col][this.row + 1]) {
+                moves.push([this.col, this.row + 1])
+            }
+            // двойной первый ход
+            if (!board[this.col][this.row + 2] && !board[this.col][this.row + 1] && this.firstMove) {
+                moves.push([this.col, this.row + 2])
+            }
+            // ход по диагонали (вниз-вправо)
+            if (this.col !== 7 && board[this.col + 1][this.row + 1] && board[this.col + 1][this.row + 1].team !== this.team) {
+                moves.push([this.col + 1, this.row + 1])
+            }
+            // ход по диагонали (вниз-влево)
+            if (this.col !== 0 && board[this.col - 1][this.row + 1] && board[this.col - 1][this.row + 1].team !== this.team) {
+                moves.push([this.col - 1, this.row + 1])
+            }
         }
         return moves
     }
     drawMoves(moves) {
-        let circle_ = document.createElementNS(NS, "g")
-        for (let move of moves) {
-            circle_.appendChild(circle(move[0] * 20, move[1] * 20, 3))
-            circle_.setAttribute("fill", "#8484847d")
+        let circle_;
+        if (!moves[0]) {
+            console.log("Нет ходов для отрисовки");
+            circle_ = undefined;
+        } else {
+            circle_ = document.createElementNS(NS, "g")
+            for (let move of moves) {
+                let part = document.createElementNS(NS, "g")
+
+                part.appendChild(circle(move[0] * 20 + 10, move[1] * 20 + 10, 3))
+                part.setAttribute("fill", "#8484847d")
+
+                part.dataset.row = move[1]
+                part.dataset.col = move[0]
+
+                circle_.appendChild(part)
+            }
             svg.appendChild(circle_)
         }
+        return circle_
     }
 }
 class Rook extends Piece {
@@ -226,8 +279,13 @@ class Rook extends Piece {
 
         group.appendChild(path(`M5 16 L15 16 L13.5 18 L6.5 18 Z`));
 
-        group.setAttribute("fill", "#ddd");
-        group.setAttribute("stroke", "#555");
+        if (this.team === "White") {
+            group.setAttribute("fill", "#ddd");
+            group.setAttribute("stroke", "#555");
+        } else {
+            group.setAttribute("fill", "#272727");
+            group.setAttribute("stroke", "#505050");
+        }
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
@@ -256,8 +314,13 @@ class Knight extends Piece {
 
         group.appendChild(path(`M6 16 L14 16 L13 18 L7 18 Z`));
 
-        group.setAttribute("fill", "#ddd");
-        group.setAttribute("stroke", "#555");
+        if (this.team === "White") {
+            group.setAttribute("fill", "#ddd");
+            group.setAttribute("stroke", "#555");
+        } else {
+            group.setAttribute("fill", "#272727");
+            group.setAttribute("stroke", "#505050");
+        }
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
@@ -292,8 +355,13 @@ class Bishop extends Piece {
 
         group.appendChild(path(`M6 16 L14 16 L13 18 L7 18 Z`));
 
-        group.setAttribute("fill", "#ddd");
-        group.setAttribute("stroke", "#555");
+        if (this.team === "White") {
+            group.setAttribute("fill", "#ddd");
+            group.setAttribute("stroke", "#555");
+        } else {
+            group.setAttribute("fill", "#272727");
+            group.setAttribute("stroke", "#505050");
+        }
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
@@ -332,8 +400,13 @@ class King extends Piece {
 
         group.appendChild(path(`M6 16 L14 16 L13 18 L7 18 Z`));
 
-        group.setAttribute("fill", "#ddd");
-        group.setAttribute("stroke", "#555");
+        if (this.team === "White") {
+            group.setAttribute("fill", "#ddd");
+            group.setAttribute("stroke", "#555");
+        } else {
+            group.setAttribute("fill", "#272727");
+            group.setAttribute("stroke", "#505050");
+        }
         group.setAttribute("stroke-width", "0.7");
         group.setAttribute("stroke-linejoin", "round");
 
@@ -395,18 +468,23 @@ svg.addEventListener("click", (event) => {
     if (!selectedPiece && !board[col][row]) { console.log(`Выбрана пустая клетка ${col} ${row}`) }
 
     if (board[col][row] && board[col][row] !== selectedPiece) {
+        if (circle_) { svg.removeChild(circle_) } // удаляем отображение ходов прошлой фигуры
         selectedPiece = board[col][row]
+        circle_ = selectedPiece.drawMoves(selectedPiece.availableMoves())
 
         cellHighlight.setAttribute("x", col * 20 + 0.5)
         cellHighlight.setAttribute("y", row * 20 + 0.5)
         svg.appendChild(cellHighlight)
 
         console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row}`)
+        console.log("Доступные ходы:", selectedPiece.availableMoves(), selectedPiece.firstMove)
     }
     if (selectedPiece && !board[col][row]) {
         selectedPiece.moveTo(col * 20, row * 20)
         selectedPiece = undefined
 
+        svg.removeChild(circle_)
+        circle_ = undefined
         cellHighlight.removeAttribute("x")
         cellHighlight.removeAttribute("y")
     }
