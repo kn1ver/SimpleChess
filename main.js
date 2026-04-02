@@ -1,4 +1,6 @@
 const board = Array.from({ length: 8 }, () => Array(8).fill(null));
+let whiteTakenPieces = []
+let blackTakenPieces = []
 let circle_
 let selectedPiece;
 let newSelectedPiece;
@@ -38,10 +40,13 @@ function drawBoard() {
 }
 function drawPieces(pieces) {
     for (let piece of pieces.values()) {
-        piece.draw()
+        if (piece.onBoard) {
+            piece.drawPiece()
+        } else {
+            piece.drawPiece(piece.coord.x, piece.coord.y, 0.5)
+        }
     }
 }
-
 function path(d, extra = {}) {
     const p = document.createElementNS(NS, "path");
     p.setAttribute("d", d);
@@ -61,12 +66,13 @@ class Piece {
     team = undefined;
     name = undefined;
     group = undefined;
+    onBoard = true;
 
     coord = { x: 0, y: 0 };
     row = 1;
     col = 1;
 
-    constructor(svg, coord = { x: 0, y: 0 }, team = "Black", name = "King") {
+    constructor(svg, coord = { x: 0, y: 0 }, team = "Black", name = "kingBlack") {
         this.coord = coord;
         this.team = team;
         this.name = name;
@@ -78,6 +84,7 @@ class Piece {
     }
 
     moveTo(newX = 0, newY = 0) {
+
         console.log(`Двигаем ${this.name} на`, newX / 20, newY / 20)
 
         board[newX / 20][newY / 20] = this
@@ -91,9 +98,55 @@ class Piece {
 
         drawPieces(pieces)
     }
+    attack(newCol, newRow) {
+        let otherPiece = board[newCol][newRow] || undefined;
+        console.log(`${this.name} ест ${otherPiece.name}`)
+        otherPiece.die()
+        this.moveTo(newCol * 20, newRow * 20)
+    }
+    die() {
+        if (this.team === "White") {
+            if (whiteTakenPieces[0]) {
+                if (whiteTakenPieces.length < 8) {
+                    this.coord.x = 160
+                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 10
+                } else if (whiteTakenPieces.length === 8) {
+                    this.coord.x = 170
+                    this.coord.y = 0
+                } else {
+                    this.coord.x = 170
+                    this.coord.y = whiteTakenPieces.at(-1).coord.y + 10
+                }
+            } else {
+                this.coord.x = 160
+                this.coord.y = 0
+            }
+            whiteTakenPieces.push(this)
+        } else {
+            if (blackTakenPieces[0]) {
+                if (blackTakenPieces.length < 8) {
+                    this.coord.x = 160
+                    this.coord.y = blackTakenPieces.at(-1).coord.y - 10
+                } else if (blackTakenPieces.length === 8) {
+                    this.coord.x = 170
+                    this.coord.y = 150
+                } else {
+                    this.coord.x = 170
+                    this.coord.y = blackTakenPieces.at(-1).coord.y - 10
+                }
+            } else {
+                this.coord.x = 160
+                this.coord.y = 150
+            }
+            blackTakenPieces.push(this)
+        }
+        this.col = undefined
+        this.row = undefined
+        this.onBoard = false
+    }
 }
 class Queen extends Piece {
-    draw(x = this.coord.x, y = this.coord.y, scale = 1) {
+    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
         let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
@@ -153,7 +206,7 @@ class Pawn extends Piece {
         super.moveTo(newX, newY)
         this.firstMove = false
     }
-    draw(x = this.coord.x, y = this.coord.y, scale = 1) {
+    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
         let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
@@ -248,7 +301,7 @@ class Pawn extends Piece {
     }
 }
 class Rook extends Piece {
-    draw(x = this.coord.x, y = this.coord.y, scale = 1) {
+    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
         let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
@@ -298,7 +351,7 @@ class Rook extends Piece {
     }
 }
 class Knight extends Piece {
-    draw(x = this.coord.x, y = this.coord.y, scale = 1) {
+    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
         let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
@@ -333,7 +386,7 @@ class Knight extends Piece {
     }
 }
 class Bishop extends Piece {
-    draw(x = this.coord.x, y = this.coord.y, scale = 1) {
+    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
         let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
@@ -374,7 +427,7 @@ class Bishop extends Piece {
     }
 }
 class King extends Piece {
-    draw(x = this.coord.x, y = this.coord.y, scale = 1) {
+    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
         let group = this.group || document.createElementNS(NS, "g");
         group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
@@ -462,31 +515,48 @@ drawPieces(pieces)
 // Отслеживаем нажатие на фигуру
 svg.addEventListener("click", (event) => {
     const target = event.target;
-    const col = target.dataset.col || target.parentElement.dataset.col
-    const row = target.dataset.row || target.parentElement.dataset.row
+    if (target.tagName === "rect" || (target.tagName === "path" && target.parentElement.dataset.row !== "undefined") || target.tagName === "circle") {
+        const col = target.dataset.col || target.parentElement.dataset.col
+        const row = target.dataset.row || target.parentElement.dataset.row
+        const cell = board[col][row]
 
-    if (!selectedPiece && !board[col][row]) { console.log(`Выбрана пустая клетка ${col} ${row}`) }
+        if (!selectedPiece && !cell) { console.log(`Выбрана пустая клетка ${col} ${row}`) }
 
-    if (board[col][row] && board[col][row] !== selectedPiece) {
-        if (circle_) { svg.removeChild(circle_) } // удаляем отображение ходов прошлой фигуры
-        selectedPiece = board[col][row]
-        circle_ = selectedPiece.drawMoves(selectedPiece.availableMoves())
+        if (selectedPiece && cell && cell.team !== selectedPiece.team) {
+            console.log(`${selectedPiece.name} ест ${cell.name}`)
 
-        cellHighlight.setAttribute("x", col * 20 + 0.5)
-        cellHighlight.setAttribute("y", row * 20 + 0.5)
-        svg.appendChild(cellHighlight)
+            selectedPiece.attack(col, row)
+            selectedPiece = undefined
 
-        console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row}`)
-        console.log("Доступные ходы:", selectedPiece.availableMoves(), selectedPiece.firstMove)
-    }
-    if (selectedPiece && !board[col][row]) {
-        selectedPiece.moveTo(col * 20, row * 20)
-        selectedPiece = undefined
+            svg.removeChild(circle_)
+            circle_ = undefined
+            cellHighlight.removeAttribute("x")
+            cellHighlight.removeAttribute("y")
+            return
+        }
 
-        svg.removeChild(circle_)
-        circle_ = undefined
-        cellHighlight.removeAttribute("x")
-        cellHighlight.removeAttribute("y")
+        if (cell && cell !== selectedPiece) {
+            if (!cell.onBoard) { console.log("Фигура не на доске"); return }
+            if (circle_) { svg.removeChild(circle_) } // удаляем отображение ходов прошлой фигуры
+            selectedPiece = cell
+            circle_ = selectedPiece.drawMoves(selectedPiece.availableMoves())
+
+            cellHighlight.setAttribute("x", col * 20 + 0.5)
+            cellHighlight.setAttribute("y", row * 20 + 0.5)
+            svg.appendChild(cellHighlight)
+
+            console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row}`)
+            console.log("Доступные ходы:", selectedPiece.availableMoves(), selectedPiece.firstMove)
+        }
+        if (selectedPiece && !cell) {
+            selectedPiece.moveTo(col * 20, row * 20)
+            selectedPiece = undefined
+
+            svg.removeChild(circle_)
+            circle_ = undefined
+            cellHighlight.removeAttribute("x")
+            cellHighlight.removeAttribute("y")
+        }
     }
 })
 
