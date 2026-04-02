@@ -1,9 +1,12 @@
 const board = Array.from({ length: 8 }, () => Array(8).fill(null));
+const svgCache = {};
+
 let whiteTakenPieces = [];
 let blackTakenPieces = [];
 let circle_;
 let selectedPiece;
 let newSelectedPiece;
+
 const NS = "http://www.w3.org/2000/svg";
 const svg = document.getElementById("svg");
 const cellHighlight = document.createElementNS(NS, "rect");
@@ -43,10 +46,23 @@ function drawPieces(pieces) {
         if (piece.onBoard) {
             piece.drawPiece()
         } else {
-            piece.drawPiece(piece.coord.x, piece.coord.y, 0.5)
+            piece.drawPiece(60, 60, 200, 200, 0, -3)
         }
     }
 }
+async function getSVG(url) {
+    if (!svgCache[url]) {
+        const res = await fetch(url);
+        svgCache[url] = await res.text();
+    }
+
+    const parser = new DOMParser();
+    return parser
+        .parseFromString(svgCache[url], "image/svg+xml")
+        .querySelector("svg")
+        .cloneNode(true);
+}
+
 function path(d, extra = {}) {
     const p = document.createElementNS(NS, "path");
     p.setAttribute("d", d);
@@ -82,6 +98,7 @@ function getMovesInDirections(piece, directions) {
     return moves;
 }
 
+
 class Piece {
     svg = undefined;
     team = undefined;
@@ -104,6 +121,24 @@ class Piece {
         board[this.col][this.row] = this;
     }
 
+    drawPiece(width = 160, height = 160, viewBoxX = 400, viewBoxY = 400, x = 1, y = 1) {
+        getSVG(this.team === "White" ? this.svgLinkWhite : this.svgLinkBlack).then(svgEl => {
+            const group = this.group || svgEl
+            group.setAttribute("viewBox", `0, 0, ${viewBoxX}, ${viewBoxY}`);
+            group.setAttribute("x", this.coord.x + x);
+            group.setAttribute("y", this.coord.y + y);
+
+            group.setAttribute("width", width);
+            group.setAttribute("height", height);
+
+            group.dataset.row = this.row;
+            group.dataset.col = this.col;
+
+            this.group = group
+            svg.appendChild(group)
+            return group
+        })
+    }
     moveTo(newX = 0, newY = 0) {
         console.log(`Двигаем ${this.name} на`, newX / 20, newY / 20)
 
@@ -145,14 +180,28 @@ class Piece {
         } else {
             if (blackTakenPieces[0]) {
                 if (blackTakenPieces.length < 8) {
-                    this.coord.x = 160
-                    this.coord.y = blackTakenPieces.at(-1).coord.y - 10
+                    const samePiece = blackTakenPieces.findLast(el => el.name.slice(0, -1) === this.name.slice(0, -1))
+                    if (samePiece) {
+                        this.coord.x = 160
+                        this.coord.y = samePiece.coord.y - 4
+                        for (let piece of blackTakenPieces) {
+                            if (piece.coord.y < this.coord.y) {
+                                piece.coord.y -= 5
+                            }
+                        }
+                    } else {
+                        const minPiece = blackTakenPieces.reduce((min, piece) => piece.coord.y < min.coord.y ? piece : min)
+                        this.coord.x = 160
+                        this.coord.y = minPiece.coord.y - 12
+                    }
+
+
                 } else if (blackTakenPieces.length === 8) {
-                    this.coord.x = 170
+                    this.coord.x = 175
                     this.coord.y = 150
                 } else {
-                    this.coord.x = 170
-                    this.coord.y = blackTakenPieces.at(-1).coord.y - 10
+                    this.coord.x = 175
+                    this.coord.y = blackTakenPieces.at(-1).coord.y - 12
                 }
             } else {
                 this.coord.x = 160
@@ -188,59 +237,9 @@ class Piece {
     }
 }
 class Queen extends Piece {
-    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
-        let group = this.group || document.createElementNS(NS, "g");
-        group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
+    svgLinkBlack = "https://lichess1.org/assets/hashed/bQ.b60573d7.svg"
+    svgLinkWhite = "https://lichess1.org/assets/hashed/wQ.c3dc7fce.svg"
 
-        // основание
-        group.appendChild(path(`
-            M4 16 
-            L16 16 
-            L14.5 18 
-            L5.5 18 
-            Z
-        `));
-
-        // тело
-        group.appendChild(path(`
-            M6 16
-            C6.5 13, 8 9.5, 10 9.5
-            C12 9.5, 13.5 13, 14 16
-            Z
-        `));
-
-        // корона
-        group.appendChild(path(`
-            M6 9.5
-            L7.5 5.5
-            L10 8
-            L12.5 5.5
-            L14 9.5
-            Z
-        `));
-
-        // шарики
-        group.appendChild(path(`M7.5 5.2 A0.8 0.8 0 1 1 7.49 5.2`));
-        group.appendChild(path(`M10 4.2 A1 1 0 1 1 9.99 4.2`));
-        group.appendChild(path(`M12.5 5.2 A0.8 0.8 0 1 1 12.49 5.2`));
-
-        if (this.team === "White") {
-            group.setAttribute("fill", "#ddd");
-            group.setAttribute("stroke", "#555");
-        } else {
-            group.setAttribute("fill", "#272727");
-            group.setAttribute("stroke", "#505050");
-        }
-        group.setAttribute("stroke-width", "0.7");
-        group.setAttribute("stroke-linejoin", "round");
-
-        group.dataset.row = this.row;
-        group.dataset.col = this.col;
-
-        svg.appendChild(group);
-        this.group = group;
-        return group;
-    }
     availableMoves() {
         const directions = [
             [0, -1], [0, 1], [-1, 0], [1, 0],
@@ -250,43 +249,15 @@ class Queen extends Piece {
     }
 }
 class Pawn extends Piece {
+    svgLinkBlack = "https://lichess1.org/assets/hashed/bP.09539f32.svg"
+    svgLinkWhite = "https://lichess1.org/assets/hashed/wP.0596b7ce.svg"
     firstMove = true
+
     moveTo(newX = 0, newY = 0) {
         super.moveTo(newX, newY)
         this.firstMove = false
     }
-    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
-        let group = this.group || document.createElementNS(NS, "g");
-        group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
 
-        group.appendChild(circle(10, 6, 2.2));
-
-        group.appendChild(path(`
-        M7 16
-        C7.5 12, 8.5 9, 10 9
-        C11.5 9, 12.5 12, 13 16
-        Z
-        `));
-
-        group.appendChild(path(`M6 16 L14 16 L13 18 L7 18 Z`));
-
-        if (this.team === "White") {
-            group.setAttribute("fill", "#ddd");
-            group.setAttribute("stroke", "#555");
-        } else {
-            group.setAttribute("fill", "#272727");
-            group.setAttribute("stroke", "#505050");
-        }
-        group.setAttribute("stroke-width", "0.7");
-        group.setAttribute("stroke-linejoin", "round");
-
-        group.dataset.row = this.row;
-        group.dataset.col = this.col;
-
-        svg.appendChild(group);
-        this.group = group;
-        return group;
-    }
     availableMoves() {
         const moves = []
         if (this.team === "White") {
@@ -328,54 +299,8 @@ class Pawn extends Piece {
     }
 }
 class Rook extends Piece {
-    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
-        let group = this.group || document.createElementNS(NS, "g");
-        group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
-
-        group.appendChild(path(`
-        M5 6
-        L7 6
-        L7 4
-        L9 4
-        L9 6
-        L11 6
-        L11 4
-        L13 4
-        L13 6
-        L15 6
-        L15 8
-        L5 8
-        Z
-    `));
-
-        group.appendChild(path(`
-        M6 8
-        L14 8
-        C13 12, 13 14, 14 16
-        L6 16
-        C7 14, 7 12, 6 8
-        Z
-    `));
-
-        group.appendChild(path(`M5 16 L15 16 L13.5 18 L6.5 18 Z`));
-
-        if (this.team === "White") {
-            group.setAttribute("fill", "#ddd");
-            group.setAttribute("stroke", "#555");
-        } else {
-            group.setAttribute("fill", "#272727");
-            group.setAttribute("stroke", "#505050");
-        }
-        group.setAttribute("stroke-width", "0.7");
-        group.setAttribute("stroke-linejoin", "round");
-
-        group.dataset.row = this.row;
-        group.dataset.col = this.col;
-
-        svg.appendChild(group);
-        this.group = group;
-        return group;
-    }
+    svgLinkBlack = "https://lichess1.org/assets/hashed/bR.7b4fa825.svg"
+    svgLinkWhite = "https://lichess1.org/assets/hashed/wR.53013fc8.svg"
     availableMoves() {
         const directions = [
             [0, -1], // вверх
@@ -387,46 +312,15 @@ class Rook extends Piece {
     }
 }
 class Knight extends Piece {
-    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
-        let group = this.group || document.createElementNS(NS, "g");
-        group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
+    svgLinkBlack = "https://lichess1.org/assets/hashed/bN.28c70309.svg"
+    svgLinkWhite = "https://lichess1.org/assets/hashed/wN.ef4cde0a.svg"
 
-        group.appendChild(path(`
-        M6 16
-        C6 13, 7 10, 9 9
-        C8 7, 9 5, 11 5
-        C13 5, 14 7, 13 9
-        C14 10, 14 12, 13 14
-        C12 15, 10 16, 6 16
-        Z
-        `));
-
-        group.appendChild(path(`M6 16 L14 16 L13 18 L7 18 Z`));
-
-        if (this.team === "White") {
-            group.setAttribute("fill", "#ddd");
-            group.setAttribute("stroke", "#555");
-        } else {
-            group.setAttribute("fill", "#272727");
-            group.setAttribute("stroke", "#505050");
-        }
-        group.setAttribute("stroke-width", "0.7");
-        group.setAttribute("stroke-linejoin", "round");
-
-        group.dataset.row = this.row;
-        group.dataset.col = this.col;
-
-        svg.appendChild(group);
-        this.group = group;
-        return group;
-    }
     availableMoves() {
-        const moves = [];
-
+        const moves = []
         const steps = [
             [1, 2], [2, 1], [-1, 2], [-2, 1],
             [1, -2], [2, -1], [-1, -2], [-2, -1]
-        ];
+        ]
 
         for (const [dx, dy] of steps) {
             const x = this.col + dx;
@@ -442,45 +336,9 @@ class Knight extends Piece {
     }
 }
 class Bishop extends Piece {
-    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
-        let group = this.group || document.createElementNS(NS, "g");
-        group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
+    svgLinkBlack = "https://lichess1.org/assets/hashed/bB.77e9debf.svg"
+    svgLinkWhite = "https://lichess1.org/assets/hashed/wB.b7d1a118.svg"
 
-        group.appendChild(path(`
-        M10 4
-        C8.5 4, 8 6, 9.5 7.5
-        C8 9, 8.5 12, 10 13
-        C11.5 12, 12 9, 10.5 7.5
-        C12 6, 11.5 4, 10 4
-        Z
-        `));
-
-        group.appendChild(path(`
-        M7 16
-        C7.5 13, 8.5 11, 10 11
-        C11.5 11, 12.5 13, 13 16
-        Z
-        `));
-
-        group.appendChild(path(`M6 16 L14 16 L13 18 L7 18 Z`));
-
-        if (this.team === "White") {
-            group.setAttribute("fill", "#ddd");
-            group.setAttribute("stroke", "#555");
-        } else {
-            group.setAttribute("fill", "#272727");
-            group.setAttribute("stroke", "#505050");
-        }
-        group.setAttribute("stroke-width", "0.7");
-        group.setAttribute("stroke-linejoin", "round");
-
-        group.dataset.row = this.row;
-        group.dataset.col = this.col;
-
-        svg.appendChild(group);
-        this.group = group;
-        return group;
-    }
     availableMoves() {
         const directions = [
             [1, 1],
@@ -492,49 +350,9 @@ class Bishop extends Piece {
     }
 }
 class King extends Piece {
-    drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
-        let group = this.group || document.createElementNS(NS, "g");
-        group.setAttribute("transform", `translate(${x}, ${y}) scale(${scale})`);
+    svgLinkBlack = "https://lichess1.org/assets/hashed/bK.b83f0a15.svg"
+    svgLinkWhite = "https://lichess1.org/assets/hashed/wK.6a015951.svg"
 
-        group.appendChild(path(`M10 3 L10 6 M8.5 4.5 L11.5 4.5`, {
-            stroke: "#555",
-            "stroke-width": "0.8",
-            fill: "none"
-        }));
-
-        group.appendChild(path(`
-        M8 6
-        C8 5, 12 5, 12 6
-        C12 7, 8 7, 8 6
-        Z
-        `));
-
-        group.appendChild(path(`
-        M7 16
-        C7.5 12, 8.5 9, 10 9
-        C11.5 9, 12.5 12, 13 16
-        Z
-        `));
-
-        group.appendChild(path(`M6 16 L14 16 L13 18 L7 18 Z`));
-
-        if (this.team === "White") {
-            group.setAttribute("fill", "#ddd");
-            group.setAttribute("stroke", "#555");
-        } else {
-            group.setAttribute("fill", "#272727");
-            group.setAttribute("stroke", "#505050");
-        }
-        group.setAttribute("stroke-width", "0.7");
-        group.setAttribute("stroke-linejoin", "round");
-
-        group.dataset.row = this.row;
-        group.dataset.col = this.col;
-
-        this.svg.appendChild(group);
-        this.group = group;
-        return group;
-    }
     availableMoves() {
         const moves = [];
 
@@ -600,10 +418,11 @@ drawPieces(pieces)
 
 // Отслеживаем нажатие на фигуру
 svg.addEventListener("click", (event) => {
-    const target = event.target;
-    if (target.tagName === "rect" || (target.tagName === "path" && target.parentElement.dataset.row !== "undefined") || target.tagName === "circle") {
-        const col = target.dataset.col || target.parentElement.dataset.col
-        const row = target.dataset.row || target.parentElement.dataset.row
+    const elements = document.elementsFromPoint(event.clientX, event.clientY);
+    const rect = elements.find(el => el.tagName === "rect");
+    if (rect) {
+        const col = rect.dataset.col
+        const row = rect.dataset.row
         const cell = board[col][row]
 
         if (!selectedPiece && !cell) { console.log(`Выбрана пустая клетка ${col} ${row}`); return }
