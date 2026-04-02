@@ -1,12 +1,12 @@
 const board = Array.from({ length: 8 }, () => Array(8).fill(null));
-let whiteTakenPieces = []
-let blackTakenPieces = []
-let circle_
+let whiteTakenPieces = [];
+let blackTakenPieces = [];
+let circle_;
 let selectedPiece;
 let newSelectedPiece;
 const NS = "http://www.w3.org/2000/svg";
 const svg = document.getElementById("svg");
-const cellHighlight = document.createElementNS(NS, "rect")
+const cellHighlight = document.createElementNS(NS, "rect");
 
 cellHighlight.setAttribute("width", 19);
 cellHighlight.setAttribute("height", 19);
@@ -60,6 +60,27 @@ function circle(cx, cy, r) {
     c.setAttribute("r", r);
     return c;
 }
+function getMovesInDirections(piece, directions) {
+    const moves = [];
+
+    for (const [dx, dy] of directions) {
+        let x = piece.col + dx;
+        let y = piece.row + dy;
+
+        while (x >= 0 && x < 8 && y >= 0 && y < 8) {
+            if (!board[x][y]) {
+                moves.push([x, y]);
+            } else if (piece.team !== board[x][y].team) {
+                moves.push([x, y])
+                break
+            } else { break }
+
+            x += dx;
+            y += dy;
+        }
+    }
+    return moves;
+}
 
 class Piece {
     svg = undefined;
@@ -84,7 +105,6 @@ class Piece {
     }
 
     moveTo(newX = 0, newY = 0) {
-
         console.log(`Двигаем ${this.name} на`, newX / 20, newY / 20)
 
         board[newX / 20][newY / 20] = this
@@ -144,6 +164,28 @@ class Piece {
         this.row = undefined
         this.onBoard = false
     }
+    drawMoves(moves) {
+        let circle_;
+        if (!moves[0]) {
+            console.log("Нет ходов для отрисовки");
+            circle_ = undefined;
+        } else {
+            circle_ = document.createElementNS(NS, "g")
+            for (let move of moves) {
+                let part = document.createElementNS(NS, "g")
+
+                part.appendChild(circle(move[0] * 20 + 10, move[1] * 20 + 10, 3))
+                part.setAttribute("fill", "#8484847d")
+
+                part.dataset.row = move[1]
+                part.dataset.col = move[0]
+
+                circle_.appendChild(part)
+            }
+            svg.appendChild(circle_)
+        }
+        return circle_
+    }
 }
 class Queen extends Piece {
     drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
@@ -199,6 +241,13 @@ class Queen extends Piece {
         this.group = group;
         return group;
     }
+    availableMoves() {
+        const directions = [
+            [0, -1], [0, 1], [-1, 0], [1, 0],
+            [1, 1], [-1, -1], [1, -1], [-1, 1]
+        ]
+        return getMovesInDirections(this, directions)
+    }
 }
 class Pawn extends Piece {
     firstMove = true
@@ -239,7 +288,7 @@ class Pawn extends Piece {
         return group;
     }
     availableMoves() {
-        let moves = []
+        const moves = []
         if (this.team === "White") {
             // ход вперед (вверх)
             if (!board[this.col][this.row - 1]) {
@@ -276,28 +325,6 @@ class Pawn extends Piece {
             }
         }
         return moves
-    }
-    drawMoves(moves) {
-        let circle_;
-        if (!moves[0]) {
-            console.log("Нет ходов для отрисовки");
-            circle_ = undefined;
-        } else {
-            circle_ = document.createElementNS(NS, "g")
-            for (let move of moves) {
-                let part = document.createElementNS(NS, "g")
-
-                part.appendChild(circle(move[0] * 20 + 10, move[1] * 20 + 10, 3))
-                part.setAttribute("fill", "#8484847d")
-
-                part.dataset.row = move[1]
-                part.dataset.col = move[0]
-
-                circle_.appendChild(part)
-            }
-            svg.appendChild(circle_)
-        }
-        return circle_
     }
 }
 class Rook extends Piece {
@@ -349,6 +376,15 @@ class Rook extends Piece {
         this.group = group;
         return group;
     }
+    availableMoves() {
+        const directions = [
+            [0, -1], // вверх
+            [0, 1],  // вниз
+            [-1, 0], // влево
+            [1, 0]   // вправо
+        ]
+        return getMovesInDirections(this, directions)
+    }
 }
 class Knight extends Piece {
     drawPiece(x = this.coord.x, y = this.coord.y, scale = 1) {
@@ -383,6 +419,26 @@ class Knight extends Piece {
         svg.appendChild(group);
         this.group = group;
         return group;
+    }
+    availableMoves() {
+        const moves = [];
+
+        const steps = [
+            [1, 2], [2, 1], [-1, 2], [-2, 1],
+            [1, -2], [2, -1], [-1, -2], [-2, -1]
+        ];
+
+        for (const [dx, dy] of steps) {
+            const x = this.col + dx;
+            const y = this.row + dy;
+
+            if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+                if (!board[x][y] || board[x][y].team !== this.team) {
+                    moves.push([x, y]);
+                }
+            }
+        }
+        return moves;
     }
 }
 class Bishop extends Piece {
@@ -424,6 +480,15 @@ class Bishop extends Piece {
         svg.appendChild(group);
         this.group = group;
         return group;
+    }
+    availableMoves() {
+        const directions = [
+            [1, 1],
+            [-1, -1],
+            [1, -1],
+            [-1, 1]
+        ]
+        return getMovesInDirections(this, directions)
     }
 }
 class King extends Piece {
@@ -469,6 +534,27 @@ class King extends Piece {
         this.svg.appendChild(group);
         this.group = group;
         return group;
+    }
+    availableMoves() {
+        const moves = [];
+
+        const steps = [
+            [0, -1], [0, 1], [-1, 0], [1, 0],
+            [1, 1], [-1, -1], [1, -1], [-1, 1]
+        ];
+
+        for (const [dx, dy] of steps) {
+            const x = this.col + dx;
+            const y = this.row + dy;
+
+            if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+                if (!board[x][y] || board[x][y].team !== this.team) {
+                    moves.push([x, y]);
+                }
+            }
+        }
+
+        return moves;
     }
 }
 
@@ -520,18 +606,20 @@ svg.addEventListener("click", (event) => {
         const row = target.dataset.row || target.parentElement.dataset.row
         const cell = board[col][row]
 
-        if (!selectedPiece && !cell) { console.log(`Выбрана пустая клетка ${col} ${row}`) }
+        if (!selectedPiece && !cell) { console.log(`Выбрана пустая клетка ${col} ${row}`); return }
 
         if (selectedPiece && cell && cell.team !== selectedPiece.team) {
+            let moves = selectedPiece.availableMoves()
+            if (!(moves.some(el => `${el[0]},${el[1]}` === `${col},${row}`))) { console.log("Недопустимый ход"); return }
             console.log(`${selectedPiece.name} ест ${cell.name}`)
 
             selectedPiece.attack(col, row)
             selectedPiece = undefined
 
-            svg.removeChild(circle_)
+            if (circle_) { svg.removeChild(circle_) }
             circle_ = undefined
-            cellHighlight.removeAttribute("x")
-            cellHighlight.removeAttribute("y")
+            cellHighlight.setAttribute("x", "200")
+            cellHighlight.setAttribute("y", "200")
             return
         }
 
@@ -547,16 +635,33 @@ svg.addEventListener("click", (event) => {
 
             console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row}`)
             console.log("Доступные ходы:", selectedPiece.availableMoves(), selectedPiece.firstMove)
+            return
         }
         if (selectedPiece && !cell) {
+            let moves = selectedPiece.availableMoves()
+            if (!(moves.some(el => `${el[0]},${el[1]}` === `${col},${row}`))) { console.log("Недопустимый ход"); return }
             selectedPiece.moveTo(col * 20, row * 20)
             selectedPiece = undefined
 
-            svg.removeChild(circle_)
+            if (circle_) { svg.removeChild(circle_) }
             circle_ = undefined
-            cellHighlight.removeAttribute("x")
-            cellHighlight.removeAttribute("y")
+            cellHighlight.setAttribute("x", "200")
+            cellHighlight.setAttribute("y", "200")
+            return
         }
+    }
+})
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && selectedPiece) {
+        console.log("Сброс выбранной фигуры")
+        selectedPiece = undefined
+
+        if (circle_) { svg.removeChild(circle_) }
+        circle_ = undefined
+        cellHighlight.setAttribute("x", "200")
+        cellHighlight.setAttribute("y", "200")
+        return
     }
 })
 
