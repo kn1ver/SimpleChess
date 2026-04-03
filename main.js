@@ -2,22 +2,25 @@ const board = Array.from({ length: 8 }, () => Array(8).fill(null));
 const svgCache = {};
 const parser = new DOMParser();
 
-let whiteTakenPieces = [];
-let blackTakenPieces = [];
 let circle_;
-let selectedPiece;
-let newSelectedPiece;
+const gameState = {
+    whiteTakenPieces: [],
+    blackTakenPieces: [],
+    selectedPiece: undefined,
+    lastMove: {
+        piece: undefined,
+        coord: []
+    }
+}
 
 const NS = "http://www.w3.org/2000/svg";
 const svg = document.getElementById("svg");
 const cellHighlight = document.createElementNS(NS, "rect");
 
+cellHighlight.classList.add("highlightCell");
 cellHighlight.setAttribute("width", 19);
 cellHighlight.setAttribute("height", 19);
 
-cellHighlight.setAttribute("fill", "none");
-cellHighlight.setAttribute("stroke", "white");
-cellHighlight.setAttribute("stroke-width", "1");
 
 function drawBoard() {
     for (let x = 0; x < 8; x++) {
@@ -37,6 +40,7 @@ function drawBoard() {
 
             rect.dataset.row = y
             rect.dataset.col = x
+            rect.dataset.board = true
 
             svg.appendChild(rect);
         }
@@ -46,6 +50,13 @@ function drawPieces(pieces) {
     for (let piece of pieces.values()) {
         piece.drawPiece()
     }
+}
+function cleanBoard() {
+    if (circle_) { svg.removeChild(circle_) }
+    circle_ = undefined
+    gameState.selectedPiece = undefined
+    cellHighlight.setAttribute("x", "200")
+    cellHighlight.setAttribute("y", "200")
 }
 async function getSVG(url) {
     if (svgCache[url]) {
@@ -60,13 +71,6 @@ async function getSVG(url) {
     svgCache[url] = svgEl;
     return svgEl.cloneNode(true);
 }
-
-function path(d, extra = {}) {
-    const p = document.createElementNS(NS, "path");
-    p.setAttribute("d", d);
-    for (const k in extra) p.setAttribute(k, extra[k]);
-    return p;
-}
 function circle(cx, cy, r) {
     const c = document.createElementNS(NS, "circle");
     c.setAttribute("cx", cx);
@@ -78,19 +82,19 @@ function getMovesInDirections(piece, directions) {
     const moves = [];
 
     for (const [dx, dy] of directions) {
-        let x = piece.col + dx;
-        let y = piece.row + dy;
+        let x = piece.col + dx
+        let y = piece.row + dy
 
         while (x >= 0 && x < 8 && y >= 0 && y < 8) {
             if (!board[x][y]) {
-                moves.push([x, y]);
+                moves.push([x, y])
             } else if (piece.team !== board[x][y].team) {
                 moves.push([x, y])
                 break
             } else { break }
 
-            x += dx;
-            y += dy;
+            x += dx
+            y += dy
         }
     }
     return moves;
@@ -138,16 +142,21 @@ class Piece {
         })
     }
     moveTo(newX = 0, newY = 0) {
-        console.log(`Двигаем ${this.name} на`, newX / 20, newY / 20)
+        const col = newX / 20
+        const row = newY / 20
+        console.log(`Двигаем ${this.name} на`, col, row)
 
-        board[newX / 20][newY / 20] = this
+        board[col][row] = this
         board[this.coord.x / 20][this.coord.y / 20] = undefined
 
+        gameState.lastMove.piece = this
+        gameState.lastMove.coord = [col, row]
+
         this.coord = { x: newX, y: newY }
-        this.row = newY / 20;
-        this.col = newX / 20;
-        this.group.dataset.col = newX / 20
-        this.group.dataset.row = newY / 20
+        this.row = row;
+        this.col = col;
+        this.group.dataset.col = col
+        this.group.dataset.row = row
 
         this.group.setAttribute("x", newX + 1);
         this.group.setAttribute("y", newY + 1);
@@ -155,14 +164,14 @@ class Piece {
     attack(newCol, newRow) {
         let otherPiece = board[newCol][newRow] || undefined
         if (!otherPiece) { return }
-        console.log(`${this.name} ест ${otherPiece.name}`)
+        console.log(`${this.name} ест ${otherPiece.name} `)
         otherPiece.die()
         this.moveTo(newCol * 20, newRow * 20)
     }
     die() {
         const perColumn = 6
         const isBlack = this.team === "Black"
-        const taken = isBlack ? blackTakenPieces : whiteTakenPieces
+        const taken = isBlack ? gameState.blackTakenPieces : gameState.whiteTakenPieces
 
         taken.push(this)
         const index = taken.length - 1
@@ -181,12 +190,11 @@ class Piece {
     drawMoves(moves) {
         let circle_;
         if (!moves[0]) {
-            console.log("Нет ходов для отрисовки");
             circle_ = undefined;
         } else {
             circle_ = document.createElementNS(NS, "g")
             for (let move of moves) {
-                let part = document.createElementNS(NS, "g")
+                const part = document.createElementNS(NS, "g")
 
                 part.appendChild(circle(move[0] * 20 + 10, move[1] * 20 + 10, 3))
                 part.setAttribute("fill", "#8484847d")
@@ -264,8 +272,14 @@ class Pawn extends Piece {
     }
 }
 class Rook extends Piece {
+    firstMove = true
     svgLinkBlack = "https://lichess1.org/assets/hashed/bR.7b4fa825.svg"
     svgLinkWhite = "https://lichess1.org/assets/hashed/wR.53013fc8.svg"
+
+    moveTo(newX = 0, newY = 0) {
+        super.moveTo(newX, newY)
+        this.firstMove = false
+    }
     availableMoves() {
         const directions = [
             [0, -1], // вверх
@@ -315,20 +329,41 @@ class Bishop extends Piece {
     }
 }
 class King extends Piece {
+    firstMove = true
     svgLinkBlack = "https://lichess1.org/assets/hashed/bK.b83f0a15.svg"
     svgLinkWhite = "https://lichess1.org/assets/hashed/wK.6a015951.svg"
 
+    moveTo(newX = 0, newY = 0) {
+        super.moveTo(newX, newY)
+        this.firstMove = false
+    }
     availableMoves() {
         const moves = [];
 
         const steps = [
             [0, -1], [0, 1], [-1, 0], [1, 0],
             [1, 1], [-1, -1], [1, -1], [-1, 1]
-        ];
+        ]
+
+        if (this.firstMove) {
+            const directions = [[1, 0], [-1, 0]]
+            for (const [dx, dy] of directions) {
+                let x = this.col + dx;
+                let y = this.row + dy;
+
+                while (x >= 0 && x < 8 && y >= 0 && y < 8) {
+                    if (board[x][y] && board[x][y].team === this.team && board[x][y].name.slice(0, 4) === "rook" && board[x][y].firstMove) {
+                        moves.push([x, y])
+                    } else if (board[x][y] && board[x][y].name.slice(0, 4) !== "rook") { break }
+                    x += dx;
+                    y += dy;
+                }
+            }
+        }
 
         for (const [dx, dy] of steps) {
-            const x = this.col + dx;
-            const y = this.row + dy;
+            const x = this.col + dx
+            const y = this.row + dy
 
             if (x >= 0 && x < 8 && y >= 0 && y < 8) {
                 if (!board[x][y] || board[x][y].team !== this.team) {
@@ -336,14 +371,23 @@ class King extends Piece {
                 }
             }
         }
-
-        return moves;
+        return moves
+    }
+    castling(rook) {
+        console.log(rook)
+        if (rook.col < this.col) {
+            this.moveTo(this.col * 20 - 2 * 20, this.row * 20)
+            rook.moveTo(rook.col * 20 + 2 * 20, this.row * 20)
+        } else {
+            this.moveTo(this.col * 20 + 2 * 20, this.row * 20)
+            rook.moveTo(rook.col * 20 - 3 * 20, this.row * 20)
+        }
     }
 }
 
 let pieces = new Map([
-    ["queenWhite", new Queen(svg, { x: 60, y: 140 }, "White", "queenWhite")],
-    ["kingWhite", new King(svg, { x: 80, y: 140 }, "White", "kingWhite")],
+    ["queenWhite", new Queen(svg, { x: 80, y: 140 }, "White", "queenWhite")],
+    ["kingWhite", new King(svg, { x: 60, y: 140 }, "White", "kingWhite")],
     ["bishopWhite1", new Bishop(svg, { x: 40, y: 140 }, "White", "bishopWhite1")],
     ["bishopWhite2", new Bishop(svg, { x: 100, y: 140 }, "White", "bishopWhite2")],
     ["knightWhite1", new Knight(svg, { x: 20, y: 140 }, "White", "knightWhite1")],
@@ -351,8 +395,8 @@ let pieces = new Map([
     ["rookWhite1", new Rook(svg, { x: 0, y: 140 }, "White", "rookWhite1")],
     ["rookWhite2", new Rook(svg, { x: 140, y: 140 }, "White", "rookWhite2")],
 
-    ["queenBlack", new Queen(svg, { x: 60, y: 0 }, "Black", "queenBlack")],
-    ["kingBlack", new King(svg, { x: 80, y: 0 }, "Black", "kingBlack")],
+    ["queenBlack", new Queen(svg, { x: 80, y: 0 }, "Black", "queenBlack")],
+    ["kingBlack", new King(svg, { x: 60, y: 0 }, "Black", "kingBlack")],
     ["bishopBlack1", new Bishop(svg, { x: 40, y: 0 }, "Black", "bishopBlack1")],
     ["bishopBlack2", new Bishop(svg, { x: 100, y: 0 }, "Black", "bishopBlack2")],
     ["knightBlack1", new Knight(svg, { x: 20, y: 0 }, "Black", "knightBlack1")],
@@ -385,31 +429,35 @@ drawPieces(pieces)
 svg.addEventListener("click", (event) => {
     const elements = document.elementsFromPoint(event.clientX, event.clientY);
     const rect = elements.find(el => el.tagName === "rect");
-    if (rect) {
+    if (rect && rect.dataset.board === "true") {
         const col = rect.dataset.col
         const row = rect.dataset.row
         const cell = board[col][row]
+        let selectedPiece = gameState.selectedPiece
 
-        if (!selectedPiece && !cell) { console.log(`Выбрана пустая клетка ${col} ${row}`); return }
+        if (!selectedPiece && !cell) { console.log(`Выбрана пустая клетка ${col} ${row} `); return }
 
-        if (selectedPiece && cell && cell.team !== selectedPiece.team) {
-            let moves = selectedPiece.availableMoves()
-            if (!(moves.some(el => `${el[0]},${el[1]}` === `${col},${row}`))) { console.log("Недопустимый ход"); return }
-            console.log(`${selectedPiece.name} ест ${cell.name}`)
+        if (selectedPiece && cell) {
+            const moves = selectedPiece.availableMoves()
+            let isAvailableMove = moves.some(el => `${el[0]},${el[1]}` === `${col},${row}`)
+            let isCastlilng = false
 
-            selectedPiece.attack(col, row)
-            selectedPiece = undefined
+            if (isAvailableMove && selectedPiece.name.slice(0, 4) === "king" && selectedPiece.firstMove) {
+                if (cell.name.slice(0, 4) === "rook") { selectedPiece.castling(cell); isCastlilng = true }
+            }
+            if (isAvailableMove && cell.team !== selectedPiece.team) {
+                console.log(`${selectedPiece.name} ест ${cell.name} `)
+                selectedPiece.attack(col, row)
+            }
 
-            if (circle_) { svg.removeChild(circle_) }
-            circle_ = undefined
-            cellHighlight.setAttribute("x", "200")
-            cellHighlight.setAttribute("y", "200")
-            return
+            cleanBoard()
+            if (isCastlilng) { return }
         }
 
         if (cell && cell !== selectedPiece) {
             if (!cell.onBoard) { console.log("Фигура не на доске"); return }
             if (circle_) { svg.removeChild(circle_) } // удаляем отображение ходов прошлой фигуры
+            gameState.selectedPiece = cell
             selectedPiece = cell
             circle_ = selectedPiece.drawMoves(selectedPiece.availableMoves())
 
@@ -417,20 +465,16 @@ svg.addEventListener("click", (event) => {
             cellHighlight.setAttribute("y", row * 20 + 0.5)
             svg.appendChild(cellHighlight)
 
-            console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row}`)
+            console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row} `)
             console.log("Доступные ходы:", selectedPiece.availableMoves(), selectedPiece.firstMove)
             return
         }
         if (selectedPiece && !cell) {
             let moves = selectedPiece.availableMoves()
-            if (!(moves.some(el => `${el[0]},${el[1]}` === `${col},${row}`))) { console.log("Недопустимый ход"); return }
+            if (!(moves.some(el => `${el[0]},${el[1]} ` === `${col},${row} `))) { console.log("Недопустимый ход"); return }
             selectedPiece.moveTo(col * 20, row * 20)
-            selectedPiece = undefined
 
-            if (circle_) { svg.removeChild(circle_) }
-            circle_ = undefined
-            cellHighlight.setAttribute("x", "200")
-            cellHighlight.setAttribute("y", "200")
+            cleanBoard()
             return
         }
     }
@@ -439,12 +483,8 @@ svg.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && selectedPiece) {
         console.log("Сброс выбранной фигуры")
-        selectedPiece = undefined
 
-        if (circle_) { svg.removeChild(circle_) }
-        circle_ = undefined
-        cellHighlight.setAttribute("x", "200")
-        cellHighlight.setAttribute("y", "200")
+        cleanBoard()
         return
     }
 })

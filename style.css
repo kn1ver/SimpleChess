@@ -9,6 +9,7 @@ svg {
 }
 
 .highlightCell {
-    stroke: rgb(255, 255, 255);
+    fill: none;
+    stroke: white;
     stroke-width: 1;
 }
