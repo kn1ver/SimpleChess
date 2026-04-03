@@ -9,7 +9,10 @@ const gameState = {
     selectedPiece: undefined,
     lastMove: {
         piece: undefined,
-        coord: []
+        coord: {
+            col: 0,
+            row: 0
+        }
     }
 }
 
@@ -150,7 +153,8 @@ class Piece {
         board[this.coord.x / 20][this.coord.y / 20] = undefined
 
         gameState.lastMove.piece = this
-        gameState.lastMove.coord = [col, row]
+        gameState.lastMove.coord.col = col
+        gameState.lastMove.coord.row = row
 
         this.coord = { x: newX, y: newY }
         this.row = row;
@@ -222,53 +226,80 @@ class Queen extends Piece {
     }
 }
 class Pawn extends Piece {
+    firstMove = true
+    lastMoveIsDouble = false
     svgLinkBlack = "https://lichess1.org/assets/hashed/bP.09539f32.svg"
     svgLinkWhite = "https://lichess1.org/assets/hashed/wP.0596b7ce.svg"
-    firstMove = true
 
     moveTo(newX = 0, newY = 0) {
+        const moveLength = this.team === "Black" ? newY / 20 - this.coord.y / 20 : this.coord.y / 20 - newY / 20
+        if (this.firstMove && moveLength === 2) {
+            this.lastMoveIsDouble = true
+        } else {
+            this.lastMoveIsDouble = false
+        }
+
         super.moveTo(newX, newY)
         this.firstMove = false
     }
 
     availableMoves() {
-        const moves = []
-        if (this.team === "White") {
-            // ход вперед (вверх)
-            if (!board[this.col][this.row - 1]) {
-                moves.push([this.col, this.row - 1])
-            }
-            // двойной первый ход
-            if (!board[this.col][this.row - 2] && !board[this.col][this.row - 1] && this.firstMove) {
-                moves.push([this.col, this.row - 2])
-            }
-            // ход по диагонали (вверх-влево)
-            if (this.col !== 0 && board[this.col - 1][this.row - 1] && board[this.col - 1][this.row - 1].team !== this.team) {
-                moves.push([this.col - 1, this.row - 1])
-            }
-            // ход по диагонали (вверх-вправо)
-            if (this.col !== 7 && board[this.col + 1][this.row - 1] && board[this.col + 1][this.row - 1].team !== this.team) {
-                moves.push([this.col + 1, this.row - 1])
-            }
-        } else {
-            // ход вперед (вниз)
-            if (!board[this.col][this.row + 1]) {
-                moves.push([this.col, this.row + 1])
-            }
-            // двойной первый ход
-            if (!board[this.col][this.row + 2] && !board[this.col][this.row + 1] && this.firstMove) {
-                moves.push([this.col, this.row + 2])
-            }
-            // ход по диагонали (вниз-вправо)
-            if (this.col !== 7 && board[this.col + 1][this.row + 1] && board[this.col + 1][this.row + 1].team !== this.team) {
-                moves.push([this.col + 1, this.row + 1])
-            }
-            // ход по диагонали (вниз-влево)
-            if (this.col !== 0 && board[this.col - 1][this.row + 1] && board[this.col - 1][this.row + 1].team !== this.team) {
-                moves.push([this.col - 1, this.row + 1])
+        const moves = [];
+        const dir = this.team === "White" ? -1 : 1; // направление
+        const startRow = this.team === "White" ? 6 : 1;
+
+        const nextRow = this.row + dir;
+
+        // 1. ход вперед
+        if (!board[this.col]?.[nextRow]) {
+            moves.push([this.col, nextRow]);
+
+            // 2. двойной ход
+            const doubleRow = this.row + dir * 2;
+            if (this.row === startRow && !board[this.col]?.[doubleRow]) {
+                moves.push([this.col, doubleRow]);
             }
         }
-        return moves
+
+        // 3. диагонали (взятие)
+        for (const dc of [-1, 1]) {
+            const col = this.col + dc;
+            const target = board[col]?.[nextRow];
+
+            if (col >= 0 && col <= 7 && target && target.team !== this.team) {
+                moves.push([col, nextRow]);
+            }
+        }
+
+        // 4. en passant
+        const last = gameState.lastMove?.piece;
+
+        if (
+            last &&
+            last !== this &&
+            last.lastMoveIsDouble &&
+            last.row === this.row &&
+            Math.abs(last.col - this.col) === 1
+        ) {
+            const targetCol = last.col;
+            const targetRow = this.row + dir;
+
+            moves.push([targetCol, targetRow]);
+        }
+        return moves;
+    }
+    attack(newCol, newRow, IsEnPassant) {
+        // en passant
+        const last = gameState.lastMove.piece ? gameState.lastMove.piece : undefined;
+        if (last && IsEnPassant) {
+            const otherPiece = last
+            console.log(`${this.name} ест (en passant) ${otherPiece.name}`)
+
+            otherPiece.die()
+            this.moveTo(newCol * 20, newRow * 20)
+        } else {
+            super.attack(newCol, newRow)
+        }
     }
 }
 class Rook extends Piece {
@@ -429,7 +460,7 @@ drawPieces(pieces)
 svg.addEventListener("click", (event) => {
     const elements = document.elementsFromPoint(event.clientX, event.clientY);
     const rect = elements.find(el => el.tagName === "rect");
-    if (rect && rect.dataset.board === "true") {
+    if (rect?.dataset.board === "true") {
         const col = rect.dataset.col
         const row = rect.dataset.row
         const cell = board[col][row]
@@ -471,8 +502,19 @@ svg.addEventListener("click", (event) => {
         }
         if (selectedPiece && !cell) {
             let moves = selectedPiece.availableMoves()
+            const last = gameState.lastMove.piece ? gameState.lastMove.piece : undefined
             if (!(moves.some(el => `${el[0]},${el[1]} ` === `${col},${row} `))) { console.log("Недопустимый ход"); return }
-            selectedPiece.moveTo(col * 20, row * 20)
+
+            // en passant
+            if (
+                selectedPiece.name.slice(0, 4) === "pawn" &&
+                last?.name.slice(0, 4) === "pawn" &&
+                last.team !== selectedPiece.team &&
+                last.lastMoveIsDouble &&
+                last.row === selectedPiece.row &&
+                +last.col === +col
+            ) { selectedPiece.attack(col, row, true) }
+            else { selectedPiece.moveTo(col * 20, row * 20) }
 
             cleanBoard()
             return
