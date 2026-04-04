@@ -7,6 +7,7 @@ const gameState = {
     whiteTakenPieces: [],
     blackTakenPieces: [],
     selectedPiece: undefined,
+    check: "",
     lastMove: {
         piece: undefined,
         coord: {
@@ -101,6 +102,33 @@ function getMovesInDirections(piece, directions) {
         }
     }
     return moves;
+}
+function isCheck(team) {
+    let king;
+
+    // находим короля
+    for (let x = 0; x < 8; x++) {
+        for (let y = 0; y < 8; y++) {
+            const p = board[x][y];
+            if (p && p.team === team && p.name.startsWith("king")) {
+                king = p
+            }
+        }
+    }
+
+    // проверяем атаки всех фигур противника
+    for (let x = 0; x < 8; x++) {
+        for (let y = 0; y < 8; y++) {
+            const p = board[x][y];
+            if (p && p.team !== team) {
+                const moves = p.availableMoves();
+                if (moves.some(([cx, cy]) => cx === king.col && cy === king.row)) {
+                    return true
+                }
+            }
+        }
+    }
+    return false
 }
 
 
@@ -211,6 +239,80 @@ class Piece {
             svg.appendChild(circle_)
         }
         return circle_
+    }
+    getLegalMoves() {
+        const moves = this.availableMoves();
+        const legalMoves = [];
+
+        for (const [newCol, newRow] of moves) {
+
+            // сохраняем состояние
+            const oldCol = this.col;
+            const oldRow = this.row;
+
+            let captured = board[newCol]?.[newRow];
+            let enPassantCaptured = null;
+
+            const prevLastMove = {
+                piece: gameState.lastMove.piece,
+                coord: {
+                    col: gameState.lastMove.coord.col,
+                    row: gameState.lastMove.coord.row
+                }
+            };
+
+            // en passant
+            if (!captured && this.name.startsWith("pawn")) {
+                const last = prevLastMove.piece;
+
+                if (
+                    last &&
+                    last.lastMoveIsDouble &&
+                    last.row === oldRow &&
+                    last.col === newCol &&
+                    last !== this
+                ) {
+                    enPassantCaptured = last;
+                    captured = last;
+
+                    board[last.col][last.row] = undefined;
+                }
+            }
+
+            // ход
+            board[oldCol][oldRow] = undefined;
+            board[newCol][newRow] = this;
+
+            this.col = newCol;
+            this.row = newRow;
+
+            gameState.lastMove = {
+                piece: this,
+                coord: { col: newCol, row: newRow }
+            };
+
+            // проверка на шах
+            const check = isCheck(this.team);
+
+            // откат
+            this.col = oldCol;
+            this.row = oldRow;
+
+            board[oldCol][oldRow] = this;
+            board[newCol][newRow] = captured;
+
+            if (enPassantCaptured) {
+                board[enPassantCaptured.col][enPassantCaptured.row] = enPassantCaptured;
+            }
+
+            gameState.lastMove = prevLastMove;
+
+            if (!check) {
+                legalMoves.push([newCol, newRow]);
+            }
+        }
+
+        return legalMoves;
     }
 }
 class Queen extends Piece {
@@ -469,7 +571,7 @@ svg.addEventListener("click", (event) => {
         if (!selectedPiece && !cell) { console.log(`Выбрана пустая клетка ${col} ${row} `); return }
 
         if (selectedPiece && cell) {
-            const moves = selectedPiece.availableMoves()
+            const moves = selectedPiece.getLegalMoves()
             let isAvailableMove = moves.some(el => `${el[0]},${el[1]}` === `${col},${row}`)
             let isCastlilng = false
 
@@ -486,22 +588,22 @@ svg.addEventListener("click", (event) => {
         }
 
         if (cell && cell !== selectedPiece) {
-            if (!cell.onBoard) { console.log("Фигура не на доске"); return }
+            if (!cell.onBoard) { return }
             if (circle_) { svg.removeChild(circle_) } // удаляем отображение ходов прошлой фигуры
             gameState.selectedPiece = cell
             selectedPiece = cell
-            circle_ = selectedPiece.drawMoves(selectedPiece.availableMoves())
+            circle_ = selectedPiece.drawMoves(selectedPiece.getLegalMoves())
 
             cellHighlight.setAttribute("x", col * 20 + 0.5)
             cellHighlight.setAttribute("y", row * 20 + 0.5)
             svg.appendChild(cellHighlight)
 
             console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row} `)
-            console.log("Доступные ходы:", selectedPiece.availableMoves(), selectedPiece.firstMove)
+            console.log("Доступные ходы:", selectedPiece.getLegalMoves(), selectedPiece.firstMove)
             return
         }
         if (selectedPiece && !cell) {
-            let moves = selectedPiece.availableMoves()
+            const moves = selectedPiece.getLegalMoves()
             const last = gameState.lastMove.piece ? gameState.lastMove.piece : undefined
             if (!(moves.some(el => `${el[0]},${el[1]} ` === `${col},${row} `))) { console.log("Недопустимый ход"); return }
 
