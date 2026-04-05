@@ -82,27 +82,7 @@ function circle(cx, cy, r) {
     c.setAttribute("r", r);
     return c;
 }
-function getMovesInDirections(piece, directions) {
-    const moves = [];
 
-    for (const [dx, dy] of directions) {
-        let x = piece.col + dx
-        let y = piece.row + dy
-
-        while (x >= 0 && x < 8 && y >= 0 && y < 8) {
-            if (!board[x][y]) {
-                moves.push([x, y])
-            } else if (piece.team !== board[x][y].team) {
-                moves.push([x, y])
-                break
-            } else { break }
-
-            x += dx
-            y += dy
-        }
-    }
-    return moves;
-}
 function isCheck(team) {
     let king;
 
@@ -130,8 +110,93 @@ function isCheck(team) {
     }
     return false
 }
+function tryMove(piece, col, row) {
+    const moves = piece.getLegalMoves()
 
+    const isLegal = moves.some(([c, r]) => c === col && r === row)
+    if (!isLegal) return false
 
+    const target = board[col][row]
+    const last = gameState.lastMove.piece
+
+    // рокировка
+    if (target?.name.startsWith("rook") && piece.name.startsWith("king")) {
+        piece.castling(target)
+        return true
+    }
+
+    // en passant
+    if (
+        piece.name.startsWith("pawn") &&
+        last?.name.startsWith("pawn") &&
+        last.team !== piece.team &&
+        last.lastMoveIsDouble &&
+        last.row === piece.row &&
+        last.col === col
+    ) {
+        piece.attack(col, row, true)
+        return true
+    }
+
+    // обычный ход / атака
+    if (target) {
+        piece.attack(col, row)
+    } else {
+        piece.moveTo(col * 20, row * 20)
+    }
+
+    return true
+}
+function selectPiece(piece) {
+    if (!piece || !piece.onBoard) { return }
+
+    cleanBoard()
+
+    const moves = piece.getLegalMoves()
+    gameState.selectedPiece = piece
+    circle_ = piece.drawMoves(moves)
+
+    cellHighlight.setAttribute("x", piece.col * 20 + 0.5)
+    cellHighlight.setAttribute("y", piece.row * 20 + 0.5)
+    svg.appendChild(cellHighlight)
+}
+function handleClick(rect) {
+    const col = +rect.dataset.col
+    const row = +rect.dataset.row
+
+    const clickedPiece = board[col][row]
+    const selected = gameState.selectedPiece
+
+    if (!selected) {
+        selectPiece(clickedPiece)
+        return
+    }
+
+    if (tryMove(selected, col, row)) { cleanBoard(); return }
+    selectPiece(clickedPiece)
+}
+
+function getMovesInDirections(piece, directions) {
+    const moves = [];
+
+    for (const [dx, dy] of directions) {
+        let x = piece.col + dx
+        let y = piece.row + dy
+
+        while (x >= 0 && x < 8 && y >= 0 && y < 8) {
+            if (!board[x][y]) {
+                moves.push([x, y])
+            } else if (piece.team !== board[x][y].team) {
+                moves.push([x, y])
+                break
+            } else { break }
+
+            x += dx
+            y += dy
+        }
+    }
+    return moves;
+}
 class Piece {
     svg = undefined;
     team = undefined;
@@ -560,74 +625,18 @@ drawPieces(pieces)
 
 // Отслеживаем нажатие на фигуру
 svg.addEventListener("click", (event) => {
-    const elements = document.elementsFromPoint(event.clientX, event.clientY);
-    const rect = elements.find(el => el.tagName === "rect");
+    const elements = document.elementsFromPoint(event.clientX, event.clientY)
+    const rect = elements.find(el => el.tagName === "rect")
+    // const rect = event.target.closest("rect");
     if (rect?.dataset.board === "true") {
-        const col = rect.dataset.col
-        const row = rect.dataset.row
-        const cell = board[col][row]
-        let selectedPiece = gameState.selectedPiece
-
-        if (!selectedPiece && !cell) { console.log(`Выбрана пустая клетка ${col} ${row} `); return }
-
-        if (selectedPiece && cell) {
-            const moves = selectedPiece.getLegalMoves()
-            let isAvailableMove = moves.some(el => `${el[0]},${el[1]}` === `${col},${row}`)
-            let isCastlilng = false
-
-            if (isAvailableMove && selectedPiece.name.slice(0, 4) === "king" && selectedPiece.firstMove) {
-                if (cell.name.slice(0, 4) === "rook") { selectedPiece.castling(cell); isCastlilng = true }
-            }
-            if (isAvailableMove && cell.team !== selectedPiece.team) {
-                console.log(`${selectedPiece.name} ест ${cell.name} `)
-                selectedPiece.attack(col, row)
-            }
-
-            cleanBoard()
-            if (isCastlilng) { return }
-        }
-
-        if (cell && cell !== selectedPiece) {
-            if (!cell.onBoard) { return }
-            if (circle_) { svg.removeChild(circle_) } // удаляем отображение ходов прошлой фигуры
-            gameState.selectedPiece = cell
-            selectedPiece = cell
-            circle_ = selectedPiece.drawMoves(selectedPiece.getLegalMoves())
-
-            cellHighlight.setAttribute("x", col * 20 + 0.5)
-            cellHighlight.setAttribute("y", row * 20 + 0.5)
-            svg.appendChild(cellHighlight)
-
-            console.log(`Выбрана фигура ${selectedPiece.name} ${col} ${row} `)
-            console.log("Доступные ходы:", selectedPiece.getLegalMoves(), selectedPiece.firstMove)
-            return
-        }
-        if (selectedPiece && !cell) {
-            const moves = selectedPiece.getLegalMoves()
-            const last = gameState.lastMove.piece ? gameState.lastMove.piece : undefined
-            if (!(moves.some(el => `${el[0]},${el[1]} ` === `${col},${row} `))) { console.log("Недопустимый ход"); return }
-
-            // en passant
-            if (
-                selectedPiece.name.slice(0, 4) === "pawn" &&
-                last?.name.slice(0, 4) === "pawn" &&
-                last.team !== selectedPiece.team &&
-                last.lastMoveIsDouble &&
-                last.row === selectedPiece.row &&
-                +last.col === +col
-            ) { selectedPiece.attack(col, row, true) }
-            else { selectedPiece.moveTo(col * 20, row * 20) }
-
-            cleanBoard()
-            return
-        }
+        handleClick(rect)
+        return
     }
 })
 
 document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && selectedPiece) {
+    if (event.key === "Escape" && gameState.selectedPiece) {
         console.log("Сброс выбранной фигуры")
-
         cleanBoard()
         return
     }
