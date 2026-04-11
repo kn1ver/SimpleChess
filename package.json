@@ -1,0 +1,30 @@
+{
+  "name": "simple-chess",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=packages/server\" \"npm run dev --workspace=packages/client\"",
+    "build": "npm run build --workspace=packages/server && npm run build --workspace=packages/client",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint . --ext .js,.ts,.tsx",
+    "format": "prettier --write .",
+    "docker:up": "docker compose -f docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker-compose.yml down",
+    "docker:dev": "npm run docker:up && npm run dev",
+    "docker:prod": "docker compose -f docker-compose.prod.yml up --build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "@typescript-eslint/parser": "^7.5.0",
+    "@typescript-eslint/eslint-plugin": "^7.5.0",
+    "prettier": "^3.2.5",
+    "prettier-plugin-tailwindcss": "^0.5.9",
+    "prettier-plugin-organize-imports": "^4.1.0",
+    "typescript": "^5.3.3"
+  }
+}
