@@ -28,7 +28,6 @@ async function verifyToken(token: string): Promise<UserPayload | null> {
 }
 
 export async function register(data: UserDTO): Promise<UserResponse> {
-    console.log(data)
     const password = await hashPassword(data.password);
     data.password = password;
 
@@ -43,12 +42,12 @@ export async function register(data: UserDTO): Promise<UserResponse> {
 }
 
 export async function login(data: UserDTO): Promise<string> {
-    const user: User = await userRepository.findByEmail(data.email);
-
-    if (!user) {
+    const userExists = await userRepository.exists(data.email);
+    if (!userExists) {
         throw new Error('User not found');
     }
 
+    const user: User = await userRepository.findByEmail(data.email);
     const isValidPass = await verifyPassword(data.password, user.passwordHash);
     if (!isValidPass) {
         throw new Error('Invalid password');

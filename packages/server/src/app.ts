@@ -28,6 +28,8 @@ app.get('/favicon.ico', (_req, res) => {
   res.status(204).send();
 });
 
+app.use(errorHandler);
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {

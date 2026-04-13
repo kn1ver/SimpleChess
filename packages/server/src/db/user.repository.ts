@@ -15,7 +15,6 @@ export class UserRepository {
             [id, email, passwordHash, nickname || null]
         );
 
-        console.log(`создан пользователь: ${this.mapToUser(result.rows[0])}`)
         return this.mapToUser(result.rows[0]);
     }
 
