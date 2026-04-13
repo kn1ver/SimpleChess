@@ -28,6 +28,9 @@ async function verifyToken(token: string): Promise<UserPayload | null> {
 }
 
 export async function register(data: UserDTO): Promise<UserResponse> {
+    const userExists = await userRepository.exists(data.email);
+    if (userExists) { throw new Error('Email is already registered'); }
+
     const password = await hashPassword(data.password);
     data.password = password;
 
