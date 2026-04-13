@@ -1,8 +1,8 @@
 import { userRepository } from "../../db/user.repository";
 import { User, UserDTO, UserResponse, UserPayload } from '@shared/types/user';
-import { config } from '../../config/index';
+import { generateToken } from "../../utils/jwt.utils";
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+
 
 
 async function hashPassword(password: string): Promise<string> {
@@ -12,19 +12,6 @@ async function hashPassword(password: string): Promise<string> {
 
 async function verifyPassword(password: string, hash: string): Promise<boolean> {
     return bcrypt.compare(password, hash);
-}
-
-async function generateToken(payload: UserPayload): Promise<string> {
-    return jwt.sign(payload, config.JWT_SECRET, {
-        expiresIn: '1h'
-    });
-}
-async function verifyToken(token: string): Promise<UserPayload | null> {
-    try {
-        return jwt.verify(token, config.JWT_SECRET) as UserPayload;
-    } catch {
-        return null;
-    }
 }
 
 export async function register(data: UserDTO): Promise<UserResponse> {
